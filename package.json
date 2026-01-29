@@ -15,10 +15,10 @@
     "framer-motion": "^12.23.6",
     "lucide-react": "^0.525.0",
     "mongodb": "^6.17.0",
-    "next": "15.4.2",
+    "next": "16.1.6",
     "node-cron": "^4.2.1",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "react-dropzone": "^14.3.8",
     "react-hot-toast": "^2.5.2",
     "socket.io": "^4.8.1",
@@ -26,13 +26,24 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
+    "@eslint/eslintrc": "^3.3.0",
     "@tailwindcss/postcss": "^4.1.11",
     "autoprefixer": "^10.4.21",
     "cross-env": "^7.0.3",
-    "eslint": "^9",
+    "eslint": "^9.19.0",
     "eslint-config-next": "15.4.2",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "js-yaml": "^4.1.1",
+      "tar": "^7.5.7"
+    }
+  },
+  "resolutions": {
+    "@eslint/plugin-kit": "^0.5.1",
+    "js-yaml": "^4.1.1",
+    "tar": "^7.5.7"
   }
 }
