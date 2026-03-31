@@ -21,13 +21,43 @@ export default function ClipboardUI({
   onLogout
 }) {
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [lightboxBlendyId, setLightboxBlendyId] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [densityMode, setDensityMode] = useState('comfortable');
 
   const isConnected = connectionStatus.socket === 'connected';
   const noteCount = clipboard.textNotes?.length || 0;
+  const isCompact = densityMode === 'tight';
 
   const MAX_NOTES = 4;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedDensity = window.localStorage.getItem('clipboard-density-mode');
+    if (storedDensity === 'tight' || storedDensity === 'comfortable') {
+      setDensityMode(storedDensity);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('clipboard-density-mode', densityMode);
+  }, [densityMode]);
+
+  const toggleDensityMode = () => {
+    setDensityMode((prev) => (prev === 'tight' ? 'comfortable' : 'tight'));
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(pointer: coarse)');
+    const updateTouchMode = () => setIsTouchDevice(mediaQuery.matches);
+    updateTouchMode();
+    mediaQuery.addEventListener('change', updateTouchMode);
+    return () => mediaQuery.removeEventListener('change', updateTouchMode);
+  }, []);
 
   // Keyboard shortcuts and focus handling
   useEffect(() => {
@@ -43,8 +73,8 @@ export default function ClipboardUI({
         return;
       }
 
-      // Ctrl+V for pasting images
-      if (e.ctrlKey && e.key === 'v') {
+      // Ctrl/Cmd+V for pasting images
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         e.preventDefault();
         if (!isConnected) {
           toast.error("Cannot paste: not connected.");
@@ -261,18 +291,23 @@ export default function ClipboardUI({
     } else {
       toast.error('Cannot delete room: not connected.');
     }
-    setIsDeleteModalOpen(false);
   };
 
   const handleImageClick = (decryptedUrl, imageId) => {
     setLightboxImage(decryptedUrl);
+    setLightboxBlendyId(`preview-${imageId}`);
     setSelectedImageId(imageId);
   };
 
   return (
     <>
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {isConnected ? 'Connected to clipboard room' : 'Disconnected from clipboard room'}
+      </div>
       <ClipboardNavbar
         connectionStatus={connectionStatus}
+        densityMode={densityMode}
+        onToggleDensity={toggleDensityMode}
         onShare={handleShare}
         onDeleteRoom={() => setIsDeleteModalOpen(true)}
         onLogout={onLogout}
@@ -281,11 +316,10 @@ export default function ClipboardUI({
       <div
         id="clipboard-container"
         {...getRootProps()}
-        className="flex flex-col min-h-screen w-full outline-none"
-        style={{ paddingTop: '88px', paddingLeft: '10px', paddingRight: '10px' }}
+        className="flex flex-col min-h-screen w-full outline-none px-3 sm:px-4 md:px-6 pt-[calc(var(--navbar-height)+0.5rem)]"
         tabIndex={0}
       >
-        {isDragActive && (
+        {isDragActive && !isTouchDevice && (
           <div className="fixed inset-0 flex items-center justify-center bg-opacity-70 backdrop-blur-md border-4 border-dashed border-cyan-400 rounded-3xl" style={{ zIndex: 10000 }}>
             <div className="text-center">
               <UploadCloud size={64} className="mx-auto text-cyan-300 animate-bounce" />
@@ -294,56 +328,80 @@ export default function ClipboardUI({
           </div>
         )}
 
-        <main className="main-container flex-grow py-8 flex flex-col">
-          <div className="flex-grow flex items-stretch gap-6">
-            <div className={`grid flex-grow gap-6 ${noteCount >= 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <main className="main-container grow py-8 flex flex-col">
+          <h2 className="text-xl font-semibold text-gray-200 mb-6 tracking-wider">Text Notes</h2>
+          <div className={`grow flex ${noteCount >= 2 ? 'items-stretch' : 'flex-col'} ${isCompact ? 'gap-3 sm:gap-4' : 'gap-6'}`}>
+            <div className={`grid grow ${isCompact ? 'gap-2 sm:gap-3' : 'gap-4 sm:gap-6'} ${noteCount >= 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
               <AnimatePresence>
                 {clipboard.textNotes?.map((note) => (
-                  <TextNote key={note.id} note={note} roomId={roomId} encryptionKey={encryptionKey} socket={socket} isConnected={isConnected} />
+                  <TextNote key={note.id} note={note} roomId={roomId} encryptionKey={encryptionKey} socket={socket} isConnected={isConnected} isCompact={isCompact} />
                 ))}
               </AnimatePresence>
             </div>
             {noteCount < MAX_NOTES && (
-              <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`flex-shrink-0 transition-all duration-500 ease-in-out ${noteCount > 0 ? 'w-20' : 'w-full'}`}>
-                <button onClick={addTextNote} disabled={!isConnected} className="w-full h-full rounded-xl transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed group backdrop-blur-[10px] border border-white/10 hover:bg-white/10 shadow-[0_0_5px_rgba(255,255,255,0.15)] hover:shadow-[0_0_10px_rgba(255,255,255,0.25)]">
-                  <Plus size={32} className="text-gray-500 group-hover:text-white transition-colors duration-200" />
+              <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`shrink-0 transition-all duration-500 ease-in-out ${noteCount >= 2 ? (isCompact ? 'w-16' : 'w-20') : 'w-full'} ${noteCount === 1 ? 'h-14' : ''}`}>
+                <button onClick={addTextNote} disabled={!isConnected} className={`w-full h-full rounded-xl transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed group backdrop-blur-[10px] border border-white/10 hover:bg-white/10 shadow-[0_0_5px_rgba(255,255,255,0.15)] hover:shadow-[0_0_10px_rgba(255,255,255,0.25)] ${isCompact ? 'p-2' : 'p-3'}`}>
+                  <Plus size={isCompact ? 24 : 32} className="text-gray-500 group-hover:text-white transition-colors duration-200" />
                 </button>
               </motion.div>
             )}
           </div>
         </main>
 
-        <div className="main-container flex-shrink-0 py-6 mt-auto">
+        <section className="main-container shrink-0 py-6 mt-auto" aria-label="Files">
           <h2 className="text-xl font-semibold text-gray-200 mb-6 tracking-wider">Files</h2>
-          <div className="flex items-center gap-6 pb-4 overflow-x-auto px-1 pt-1">
+          <div className={`flex items-stretch ${isCompact ? 'gap-2 sm:gap-3' : 'gap-3 sm:gap-4'} pb-safe overflow-x-auto px-1 pt-1 snap-x snap-mandatory`}>
             {clipboard.files?.map((file) => (
               <div
                 key={file.id}
-                className={`flex-shrink-0 ${selectedImageId === file.id && file.type?.startsWith('image/') ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}
+                className={`shrink-0 snap-start ${selectedImageId === file.id && file.type?.startsWith('image/') ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}
                 onClick={() => file.type?.startsWith('image/') && setSelectedImageId(file.id)}
+                role={file.type?.startsWith('image/') ? 'button' : undefined}
+                tabIndex={file.type?.startsWith('image/') ? 0 : -1}
+                aria-pressed={selectedImageId === file.id && file.type?.startsWith('image/') ? true : undefined}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ' ') && file.type?.startsWith('image/')) {
+                    e.preventDefault();
+                    setSelectedImageId(file.id);
+                  }
+                }}
               >
                 <FileCard
                   file={file}
                   encryptionKey={encryptionKey}
                   roomId={roomId}
                   isConnected={isConnected}
+                  densityMode={densityMode}
                   onImageClick={handleImageClick}
                 />
               </div>
             ))}
             {clipboard.files?.length < 8 && (
-              <label className={`cursor-pointer flex-shrink-0 ${!isConnected ? 'cursor-not-allowed' : ''}`}>
-                <div className={`rounded-xl p-4 transition-all duration-300 w-44 h-40 flex items-center justify-center ${!isConnected ? 'opacity-50' : ''} group backdrop-blur-[10px] border border-white/10 hover:bg-white/10 shadow-[0_0_5px_rgba(255,255,255,0.15)] hover:shadow-[0_0_10px_rgba(255,255,255,0.25)]`}>
-                  <Plus size={28} className="text-gray-500 group-hover:text-white transition-colors duration-200" />
+              <label className={`cursor-pointer shrink-0 snap-start ${!isConnected ? 'cursor-not-allowed' : ''}`} aria-label="Upload files">
+                <div className={`rounded-xl transition-all duration-300 ${isCompact ? 'p-3 w-32 sm:w-36 h-32 sm:h-36' : 'p-4 w-40 sm:w-44 h-36 sm:h-40'} flex items-center justify-center ${!isConnected ? 'opacity-50' : ''} group backdrop-blur-[10px] border border-white/10 hover:bg-white/10 shadow-[0_0_5px_rgba(255,255,255,0.15)] hover:shadow-[0_0_10px_rgba(255,255,255,0.25)]`}>
+                  <Plus size={isCompact ? 22 : 28} className="text-gray-500 group-hover:text-white transition-colors duration-200" />
                 </div>
                 <input type="file" className="hidden" multiple onChange={(e) => Array.from(e.target.files).forEach(handleFileUpload)} disabled={!isConnected} />
               </label>
             )}
           </div>
-        </div>
+        </section>
 
-        <Lightbox imageUrl={lightboxImage} onClose={() => setLightboxImage(null)} />
-        <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} onConfirm={handleDeleteRoomConfirm} title="Delete Entire Room">
+        <Lightbox
+          imageUrl={lightboxImage}
+          blendyId={lightboxBlendyId}
+          onClose={() => {
+            setLightboxImage(null);
+            setLightboxBlendyId(null);
+          }}
+        />
+        <Modal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirm={handleDeleteRoomConfirm}
+          title="Delete Entire Room"
+          blendyId="delete-room-modal"
+        >
           <p>Are you sure you want to permanently delete this room?</p>
           <p className="mt-2 font-bold text-red-400">All text notes and files will be lost forever. This action cannot be undone.</p>
         </Modal>

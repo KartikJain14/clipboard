@@ -7,7 +7,7 @@ import { Download, X, File as FileIcon, Image as ImageIcon, Loader, Eye, Copy } 
 import { toast } from 'react-hot-toast';
 import Modal from './Modal';
 
-export default function FileCard({ file, encryptionKey, roomId, isConnected, onImageClick }) {
+export default function FileCard({ file, encryptionKey, roomId, isConnected, onImageClick, densityMode = 'comfortable' }) {
   const [decryptedName, setDecryptedName] = useState('...');
   const [isDeleting, setIsDeleting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,6 +15,7 @@ export default function FileCard({ file, encryptionKey, roomId, isConnected, onI
   const [previewUrl, setPreviewUrl] = useState(null);
 
   const isImage = file.type?.startsWith('image/');
+  const isTight = densityMode === 'tight';
 
   useEffect(() => {
     const processFile = async () => {
@@ -110,7 +111,6 @@ export default function FileCard({ file, encryptionKey, roomId, isConnected, onI
     }
 
     setIsDeleting(true);
-    setIsModalOpen(false);
     const toastId = toast.loading('Deleting file...');
 
     try {
@@ -226,11 +226,11 @@ export default function FileCard({ file, encryptionKey, roomId, isConnected, onI
 
   return (
     <>
-      <div className="relative group w-44 flex-shrink-0">
-        <div className={`bg-gray-900/50 border border-gray-600 rounded-xl p-3 hover:border-white transition-all duration-300 w-full h-40 flex flex-col ${!isConnected ? 'opacity-50' : ''}`}>
-          <div className="h-6 mb-2 flex-shrink-0"></div>
+      <div className={`relative group ${isTight ? 'w-32 sm:w-36' : 'w-40 sm:w-44'} shrink-0`}>
+        <div className={`bg-gray-900/50 border border-gray-600 rounded-xl ${isTight ? 'p-2 h-32 sm:h-36' : 'p-3 h-40'} hover:border-white transition-all duration-300 w-full flex flex-col ${!isConnected ? 'opacity-50' : ''}`}>
+          <div className={`${isTight ? 'h-5 mb-1.5' : 'h-6 mb-2'} shrink-0`}></div>
 
-          <div className="w-full flex-grow bg-gray-800 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
+          <div className="w-full grow bg-gray-800 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
             {isImage ? (
               previewUrl ? (
                 <img src={previewUrl} alt={decryptedName} className="w-full h-full object-cover" />
@@ -249,7 +249,14 @@ export default function FileCard({ file, encryptionKey, roomId, isConnected, onI
           </div>
         </div>
 
-        <button onClick={() => setIsModalOpen(true)} disabled={!isConnected || isDeleting} className="absolute top-2 right-2 z-20 text-gray-500 hover:text-red-400 bg-gray-900/50 p-1 rounded-full transition-all duration-200 disabled:opacity-30">
+        <button
+          type="button"
+          data-blendy-from={`delete-file-${file.id}`}
+          onClick={() => setIsModalOpen(true)}
+          disabled={!isConnected || isDeleting}
+          className={`absolute top-2 right-2 z-20 text-gray-500 hover:text-red-400 bg-gray-900/50 ${isTight ? 'p-2' : 'p-2.5'} rounded-full transition-all duration-200 disabled:opacity-30`}
+          aria-label={`Delete ${decryptedName}`}
+        >
           {isDeleting ? <Loader size={14} className="animate-spin" /> : <X size={14} />}
         </button>
 
@@ -257,21 +264,45 @@ export default function FileCard({ file, encryptionKey, roomId, isConnected, onI
         <div className="absolute inset-0 z-10 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl flex items-center justify-center gap-2">
           {isImage && (
             <>
-              <button onClick={() => onImageClick(previewUrl, file.id)} className="p-3 rounded-full bg-black/60 backdrop-blur-sm text-slate-200 hover:text-cyan-300 transition-colors">
-                <Eye size={20} />
+              <button
+                type="button"
+                onClick={() => onImageClick(previewUrl, file.id)}
+                data-blendy-from={`preview-${file.id}`}
+                className={`${isTight ? 'p-2.5' : 'p-3'} rounded-full bg-black/60 backdrop-blur-sm text-slate-200 hover:text-cyan-300 transition-colors`}
+                aria-label={`Preview ${decryptedName}`}
+              >
+                <Eye size={isTight ? 18 : 20} />
               </button>
-              <button onClick={handleCopyImage} className="p-3 rounded-full bg-black/60 backdrop-blur-sm text-slate-200 hover:text-cyan-300 transition-colors">
-                <Copy size={20} />
+              <button
+                type="button"
+                onClick={handleCopyImage}
+                className={`${isTight ? 'p-2.5' : 'p-3'} rounded-full bg-black/60 backdrop-blur-sm text-slate-200 hover:text-cyan-300 transition-colors`}
+                aria-label={`Copy ${decryptedName} to clipboard`}
+              >
+                <Copy size={isTight ? 18 : 20} />
               </button>
             </>
           )}
-          <button onClick={handleDownload} disabled={isDownloading} className="p-3 rounded-full bg-black/60 backdrop-blur-sm text-slate-200 hover:text-cyan-300 transition-colors disabled:opacity-50">
-            {isDownloading ? <Loader size={20} className="animate-spin" /> : <Download size={20} />}
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className={`${isTight ? 'p-2.5' : 'p-3'} rounded-full bg-black/60 backdrop-blur-sm text-slate-200 hover:text-cyan-300 transition-colors disabled:opacity-50`}
+            aria-label={isDownloading ? `Downloading ${decryptedName}` : `Download ${decryptedName}`}
+            aria-busy={isDownloading}
+          >
+            {isDownloading ? <Loader size={isTight ? 18 : 20} className="animate-spin" /> : <Download size={isTight ? 18 : 20} />}
           </button>
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={handleDeleteConfirm} title="Delete File">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete File"
+        blendyId={`delete-file-${file.id}`}
+      >
         <p>Are you sure you want to permanently delete this file?</p>
         <p className="font-bold mt-2 truncate">{decryptedName}</p>
       </Modal>

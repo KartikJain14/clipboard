@@ -15,10 +15,16 @@ import dynamic from 'next/dynamic';
     },
   };
 
+  export const viewport = {
+    width: 'device-width',
+    initialScale: 1,
+    viewportFit: 'cover',
+  };
+
   export default function RootLayout({ children }) {
     return (
       <html lang="en">
-        <body>
+        <body style={{ backgroundColor: '#000' }}>
         <header>
         <script defer src="https://umami.mpst.me/script.js" data-website-id="58527263-d23e-468b-9f93-a07507ddba5e"></script>
         </header>
@@ -26,6 +32,7 @@ import dynamic from 'next/dynamic';
             <DynamicParticleBackground />
           </ClientOnly>
           <main className="relative z-10">
+            <h1 className="sr-only">Live Clipboard</h1>
             {children}
           </main>
           <Footer/>

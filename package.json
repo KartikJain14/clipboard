@@ -3,19 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node server.js --host",
+    "dev:host": "node server.js --host",
     "build": "next build",
     "start": "cross-env NODE_ENV=production node server.js",
     "lint": "next lint"
   },
   "dependencies": {
     "@next/bundle-analyzer": "^16.0.1",
+    "blendy": "^0.0.1",
+    "clsx": "^2.1.1",
     "dotenv": "^17.2.0",
     "firebase": "^12.0.0",
     "framer-motion": "^12.23.6",
     "lucide-react": "^0.525.0",
     "mongodb": "^6.17.0",
-    "next": "16.1.6",
+    "motion": "^12.38.0",
+    "next": "^16.1.6",
     "node-cron": "^4.2.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -23,6 +27,7 @@
     "react-hot-toast": "^2.5.2",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
+    "tailwind-merge": "^3.5.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
@@ -31,15 +36,9 @@
     "autoprefixer": "^10.4.21",
     "cross-env": "^7.0.3",
     "eslint": "^9.19.0",
-    "eslint-config-next": "15.4.2",
+    "eslint-config-next": "^15.4.2",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.11"
-  },
-  "pnpm": {
-    "overrides": {
-      "js-yaml": "^4.1.1",
-      "tar": "^7.5.7"
-    }
   },
   "resolutions": {
     "@eslint/plugin-kit": "^0.5.1",

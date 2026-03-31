@@ -117,6 +117,18 @@ MAX_FILE_SIZE=100 # in MB
 PORT=3000
 ```
 
+### Optional: No-DB demo bypass for UI testing
+
+Use this only in local development to test the full UI flow without MongoDB.
+
+```env
+ENABLE_DEMO_BYPASS=true
+DEMO_ADMIN_PIN=123456
+```
+
+Then start the app and use the 6-digit PIN from `DEMO_ADMIN_PIN` on the password screen.
+This bypass is automatically disabled in production.
+
 ### Start the development server
 
 ```bash

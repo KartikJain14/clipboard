@@ -10,6 +10,20 @@ import { v4 as uuidv4 } from 'uuid';
 const rateLimitStore = {};
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const RATE_LIMIT_MAX_UPLOADS = 20; // Max 20 uploads per room per 10 minutes
+const isEnvFlagEnabled = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
+
+const isDemoBypassEnabled = () => (
+  !process.env.MONGODB_URI &&
+  process.env.NODE_ENV !== 'production' &&
+  isEnvFlagEnabled(process.env.ENABLE_DEMO_BYPASS)
+);
+
+const getDemoRooms = () => {
+  if (!globalThis.__DEMO_ROOMS) {
+    globalThis.__DEMO_ROOMS = new Map();
+  }
+  return globalThis.__DEMO_ROOMS;
+};
 
 const checkRateLimit = (roomId) => {
   const now = Date.now();
@@ -77,14 +91,29 @@ export async function POST(req) {
 
     const db = await getDatabase();
 
-    await db.collection('clipboards').updateOne(
-      { _id: roomId },
-      {
-        $push: { files: newFile },
-        $set: { lastUpdated: new Date() }, // Crucially, update the timestamp
-      },
-      { upsert: true }
-    );
+    if (db) {
+      await db.collection('clipboards').updateOne(
+        { _id: roomId },
+        {
+          $push: { files: newFile },
+          $set: { lastUpdated: new Date() },
+        },
+        { upsert: true }
+      );
+    } else if (isDemoBypassEnabled()) {
+      const demoRooms = getDemoRooms();
+      const existing = demoRooms.get(roomId) || {
+        _id: roomId,
+        textNotes: [],
+        files: [],
+        createdAt: new Date(),
+      };
+      existing.files = [...(existing.files || []), newFile];
+      demoRooms.set(roomId, existing);
+    } else {
+      await fs.unlink(filePath).catch(() => {});
+      return NextResponse.json({ error: 'Database is not configured' }, { status: 503 });
+    }
 
     if (global.io) {
       global.io.to(roomId).emit('file-added', newFile);
@@ -109,11 +138,20 @@ export async function DELETE(req) {
     }
 
     const db = await getDatabase();
+    let clipboard = null;
 
-    const clipboard = await db.collection('clipboards').findOne(
-      { _id: roomId },
-      { projection: { files: { $elemMatch: { id: fileId } } } }
-    );
+    if (db) {
+      clipboard = await db.collection('clipboards').findOne(
+        { _id: roomId },
+        { projection: { files: { $elemMatch: { id: fileId } } } }
+      );
+    } else if (isDemoBypassEnabled()) {
+      const room = getDemoRooms().get(roomId);
+      const fileMatch = room?.files?.find((file) => file.id === fileId);
+      clipboard = fileMatch ? { files: [fileMatch] } : null;
+    } else {
+      return NextResponse.json({ error: 'Database is not configured' }, { status: 503 });
+    }
 
     if (clipboard?.files?.length > 0) {
       const fileToDelete = clipboard.files[0];
@@ -125,13 +163,22 @@ export async function DELETE(req) {
       }
     }
 
-    await db.collection('clipboards').updateOne(
-      { _id: roomId },
-      {
-        $pull: { files: { id: fileId } },
-        $set: { lastUpdated: new Date() } // Also update timestamp on delete
+    if (db) {
+      await db.collection('clipboards').updateOne(
+        { _id: roomId },
+        {
+          $pull: { files: { id: fileId } },
+          $set: { lastUpdated: new Date() }
+        }
+      );
+    } else {
+      const demoRooms = getDemoRooms();
+      const room = demoRooms.get(roomId);
+      if (room) {
+        room.files = (room.files || []).filter((file) => file.id !== fileId);
+        demoRooms.set(roomId, room);
       }
-    );
+    }
 
     if (global.io) {
       global.io.to(roomId).emit('file-deleted', fileId);

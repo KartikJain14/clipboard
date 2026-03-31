@@ -8,27 +8,93 @@ const { MongoClient } = require('mongodb');
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
+const { createHash } = require('crypto');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = dev ? "localhost" : "0.0.0.0";
+// Allow --host parameter to override hostname for mobile access
+const hasHostFlag = process.argv.includes('--host');
+const hostname = hasHostFlag ? "0.0.0.0" : (dev ? "localhost" : "0.0.0.0");
 const port = process.env.PORT || 3000;
+const getAllowedSocketOrigins = () => {
+    if (!dev) {
+        return process.env.SOCKET_IO_ORIGIN || false;
+    }
+
+    return [
+        `http://localhost:${port}`,
+        `http://127.0.0.1:${port}`,
+        `http://192.168.11.11:${port}`,
+    ];
+};
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 const MONGODB_URI = process.env.MONGODB_URI;
-const DB_NAME = MONGODB_URI.split('/').pop();
-if (!MONGODB_URI) {
-    throw new Error('Please define the MONGODB_URI environment variable in .env.local');
+const DEFAULT_DB_NAME = process.env.MONGODB_DB_NAME || 'clipboard';
+const isEnvFlagEnabled = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
+const DB_NAME = MONGODB_URI
+    ? (MONGODB_URI.split('/').pop() || DEFAULT_DB_NAME).split('?')[0]
+    : DEFAULT_DB_NAME;
+const isMongoEnabled = Boolean(MONGODB_URI);
+const DEMO_BYPASS_ENABLED =
+    !isMongoEnabled &&
+    process.env.NODE_ENV !== 'production' &&
+    isEnvFlagEnabled(process.env.ENABLE_DEMO_BYPASS);
+const DEMO_ADMIN_PIN = process.env.DEMO_ADMIN_PIN || '123456';
+const DEMO_ADMIN_HASH = createHash('sha256').update(DEMO_ADMIN_PIN).digest('hex');
+
+if (!global.__DEMO_ROOMS) {
+    global.__DEMO_ROOMS = new Map();
 }
-const clientPromise = new MongoClient(MONGODB_URI).connect();
-console.log('MongoDB client configured.');
+
+const getDemoRooms = () => global.__DEMO_ROOMS;
+
+const clientPromise = isMongoEnabled
+    ? new MongoClient(MONGODB_URI).connect()
+    : Promise.resolve(null);
+
+if (isMongoEnabled) {
+    console.log(`MongoDB client configured. DB: ${DB_NAME}`);
+} else {
+    console.warn('MONGODB_URI is not set. Mongo-backed features are disabled.');
+    if (DEMO_BYPASS_ENABLED) {
+        console.warn(`Demo bypass enabled. Use 6-digit admin PIN: ${DEMO_ADMIN_PIN}`);
+    }
+}
+
+const getDb = async () => {
+    if (!isMongoEnabled) return null;
+    const client = await clientPromise;
+    return client.db(DB_NAME);
+};
+
+const getOrCreateDemoRoom = (roomId, expiration) => {
+    const demoRooms = getDemoRooms();
+    if (!demoRooms.has(roomId)) {
+        const initialNote = {
+            id: Date.now().toString(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        demoRooms.set(roomId, {
+            _id: roomId,
+            textNotes: [initialNote],
+            files: [],
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + (Number(expiration) || 24 * 60 * 60 * 1000)),
+        });
+    }
+
+    return demoRooms.get(roomId);
+};
 
 const deleteClipboardData = async (clipboard) => {
     // ... (this function remains the same)
     if (!clipboard) return;
-    const client = await clientPromise;
-    const db = client.db(DB_NAME);
+    const db = await getDb();
+    if (!db) return;
 
     if (clipboard.files && clipboard.files.length > 0) {
         for (const file of clipboard.files) {
@@ -50,8 +116,11 @@ const deleteClipboardData = async (clipboard) => {
 const cleanupExpiredClipboards = async () => {
     console.log('Running cleanup job for expired clipboards...');
     try {
-        const client = await clientPromise;
-        const db = client.db(DB_NAME);
+        const db = await getDb();
+        if (!db) {
+            console.log('Skipping cleanup: MongoDB is not configured.');
+            return;
+        }
         
         // Find documents where the expiresAt date is in the past
         const expiredClipboards = await db.collection('clipboards').find({
@@ -68,6 +137,17 @@ const cleanupExpiredClipboards = async () => {
         }
     } catch (error) {
         console.error('Error during clipboard cleanup job:', error);
+    }
+
+    if (DEMO_BYPASS_ENABLED) {
+        const now = Date.now();
+        const demoRooms = getDemoRooms();
+        for (const [roomKey, room] of demoRooms.entries()) {
+            const expiresAt = room?.expiresAt ? new Date(room.expiresAt).getTime() : Infinity;
+            if (expiresAt < now) {
+                demoRooms.delete(roomKey);
+            }
+        }
     }
 };
 
@@ -104,7 +184,11 @@ app.prepare().then(() => {
     });
 
     const io = new Server(httpServer, {
-        cors: { origin: `http://localhost:${port}`, methods: ['GET', 'POST'] },
+        cors: {
+            origin: getAllowedSocketOrigins(),
+            methods: ['GET', 'POST'],
+            credentials: true,
+        },
     });
     global.io = io;
 
@@ -112,8 +196,17 @@ app.prepare().then(() => {
         // ... ('test-connection' and 'delete-room' listeners remain the same)
         socket.on('test-connection', async () => {
             try {
-                const client = await clientPromise;
-                await client.db(DB_NAME).command({ ping: 1 });
+                const db = await getDb();
+                if (!db) {
+                    socket.emit('connection-status', {
+                        socket: 'connected',
+                        mongodb: DEMO_BYPASS_ENABLED ? 'connected' : 'failed',
+                        error: DEMO_BYPASS_ENABLED ? null : 'MONGODB_URI not configured',
+                    });
+                    return;
+                }
+
+                await db.command({ ping: 1 });
                 socket.emit('connection-status', {
                     socket: 'connected',
                     mongodb: 'connected',
@@ -130,8 +223,18 @@ app.prepare().then(() => {
         socket.on('delete-room', async ({ roomId }) => {
             if (socket.roomId !== roomId) return;
             try {
-                const client = await clientPromise;
-                const db = client.db(DB_NAME);
+                const db = await getDb();
+                if (!db) {
+                    if (!DEMO_BYPASS_ENABLED) {
+                        socket.emit('error', { message: 'Database is not configured.' });
+                        return;
+                    }
+
+                    getDemoRooms().delete(roomId);
+                    io.to(roomId).emit('room-deleted');
+                    return;
+                }
+
                 const clipboard = await db.collection('clipboards').findOne({ _id: roomId });
 
                 if (clipboard) {
@@ -148,8 +251,26 @@ app.prepare().then(() => {
         // UPDATED: 'authenticate-room' now accepts 'expiration'
         socket.on('authenticate-room', async ({ roomId, passwordHash, expiration }) => {
             try {
-                const client = await clientPromise;
-                const db = client.db(DB_NAME);
+                const db = await getDb();
+                if (!db) {
+                    if (!DEMO_BYPASS_ENABLED) {
+                        socket.emit('authentication-failed', { message: 'Server is not configured with a database. Set ENABLE_DEMO_BYPASS=true for local demo mode.' });
+                        return;
+                    }
+
+                    if (passwordHash !== DEMO_ADMIN_HASH) {
+                        socket.emit('authentication-failed', { message: 'Invalid demo admin password.' });
+                        return;
+                    }
+
+                    const room = getOrCreateDemoRoom(roomId, expiration);
+                    socket.join(roomId);
+                    socket.roomId = roomId;
+                    socket.emit('authentication-success');
+                    socket.emit('room-data', { textNotes: room.textNotes || [], files: room.files || [] });
+                    return;
+                }
+
                 let room = await db.collection('clipboards').findOne({ _id: roomId });
 
                 if (!room) {
@@ -194,8 +315,24 @@ app.prepare().then(() => {
         // UPDATED: Note and file listeners now only update the content, not the room's lastUpdated time
         socket.on('add-note', async ({ roomId, note }) => {
             if (socket.roomId !== roomId) return;
-            const client = await clientPromise;
-            const db = client.db(DB_NAME);
+            const db = await getDb();
+            if (!db) {
+                if (!DEMO_BYPASS_ENABLED) {
+                    socket.emit('error', { message: 'Database is not configured.' });
+                    return;
+                }
+
+                const room = getOrCreateDemoRoom(roomId);
+                if (room.textNotes.length >= 4) {
+                    socket.emit('error', { message: 'Maximum 4 text notes allowed.' });
+                    return;
+                }
+
+                const noteWithTimestamp = { ...note, createdAt: new Date(), updatedAt: new Date() };
+                room.textNotes.push(noteWithTimestamp);
+                io.to(roomId).emit('note-added', noteWithTimestamp);
+                return;
+            }
 
             const room = await db.collection('clipboards').findOne({ _id: roomId }, { projection: { textNotes: 1 } });
             if (room && room.textNotes && room.textNotes.length >= 4) {
@@ -210,8 +347,22 @@ app.prepare().then(() => {
 
         socket.on('update-note', async ({ roomId, noteId, encryptedContent }) => {
             if (socket.roomId !== roomId) return;
-            const client = await clientPromise;
-            const db = client.db(DB_NAME);
+            const db = await getDb();
+            if (!db) {
+                if (!DEMO_BYPASS_ENABLED) {
+                    socket.emit('error', { message: 'Database is not configured.' });
+                    return;
+                }
+
+                const room = getOrCreateDemoRoom(roomId);
+                room.textNotes = room.textNotes.map((note) => (
+                    note.id === noteId
+                        ? { ...note, content: encryptedContent, updatedAt: new Date() }
+                        : note
+                ));
+                socket.to(roomId).emit('note-updated', { noteId, encryptedContent });
+                return;
+            }
             await db.collection('clipboards').updateOne(
                 { _id: roomId, 'textNotes.id': noteId },
                 { $set: { 'textNotes.$.content': encryptedContent, 'textNotes.$.updatedAt': new Date() } }
@@ -221,8 +372,18 @@ app.prepare().then(() => {
 
         socket.on('delete-note', async ({ roomId, noteId }) => {
             if (socket.roomId !== roomId) return;
-            const client = await clientPromise;
-            const db = client.db(DB_NAME);
+            const db = await getDb();
+            if (!db) {
+                if (!DEMO_BYPASS_ENABLED) {
+                    socket.emit('error', { message: 'Database is not configured.' });
+                    return;
+                }
+
+                const room = getOrCreateDemoRoom(roomId);
+                room.textNotes = room.textNotes.filter((note) => note.id !== noteId);
+                io.to(roomId).emit('note-deleted', noteId);
+                return;
+            }
             await db.collection('clipboards').updateOne({ _id: roomId }, { $pull: { textNotes: { id: noteId } } });
             io.to(roomId).emit('note-deleted', noteId);
         });

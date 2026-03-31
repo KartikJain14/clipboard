@@ -4,13 +4,13 @@ let client;
 let clientPromise;
 
 export function getMongoClient() {
-  if (!clientPromise) {
-    const uri = process.env.MONGODB_URI;
-    const options = {};
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    return null;
+  }
 
-    if (!uri) {
-      throw new Error('Missing MONGODB_URI environment variable');
-    }
+  if (!clientPromise) {
+    const options = {};
 
     client = new MongoClient(uri, options);
 
@@ -30,9 +30,10 @@ export function getMongoClient() {
 
 export async function getDatabase() {
   const client = await getMongoClient();
+  if (!client) return null;
 
   const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error('Missing MONGODB_URI environment variable');
+  if (!uri) return null;
 
   const dbName = uri.split('/').pop()?.split('?')[0];
   return client.db(dbName);

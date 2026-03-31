@@ -7,11 +7,17 @@ export default function ParticleBackground() {
   const canvasRef = useRef(null);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
     let animationFrameId;
+    let lastDrawTime = 0;
+    const FRAME_INTERVAL_MS = 28;
 
     // Set canvas dimensions and handle resizing
     const setupCanvas = () => {
@@ -38,8 +44,8 @@ export default function ParticleBackground() {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // CHANGE 2: Set the color to a white shade with 70% opacity.
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      // Make glyphs dimmer while keeping legibility.
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.49)';
       ctx.font = `${fontSize}px monospace`;
 
       // 3. Loop through each column to draw the characters
@@ -56,12 +62,15 @@ export default function ParticleBackground() {
     };
 
     // --- Start the animation loop ---
-    const animate = () => {
-      draw();
+    const animate = (timestamp) => {
+      if (timestamp - lastDrawTime >= FRAME_INTERVAL_MS) {
+        draw();
+        lastDrawTime = timestamp;
+      }
       animationFrameId = window.requestAnimationFrame(animate);
     };
     
-    animate();
+    animationFrameId = window.requestAnimationFrame(animate);
 
     // --- Cleanup function ---
     return () => {
