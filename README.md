@@ -110,6 +110,7 @@ npm install
 ```
 
 ### Create `.env`
+### Create `.env`
 
 ```env
 MONGODB_URI="mongodb://user:pass@host/live_clipboard"
