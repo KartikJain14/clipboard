@@ -1,3 +1,49 @@
+# version: "3.9"
+
+# services:
+#   app:
+#     build: .
+#     container_name: clipboard-app
+#     restart: always
+#     ports:
+#       - "3000:3000"
+#     environment:
+#       NODE_ENV: production
+#       MONGODB_URI: mongodb://mongo:27017/live_clipboard
+#       MAX_FILE_SIZE: 100
+#       PORT: 3000
+#     depends_on:
+#       - mongo
+#     volumes:
+#       - ./public/uploads:/app/public/uploads
+#     networks:
+#       - internal
+#     healthcheck:
+#       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+#       interval: 30s
+#       timeout: 5s
+#       start_period: 30s
+#       retries: 3
+
+#   mongo:
+#     image: mongo:6
+#     container_name: clipboard-mongo
+#     restart: always
+#     volumes:
+#       - mongodb_data:/data/db
+#     networks:
+#       - internal
+
+# volumes:
+#   mongodb_data:
+
+# networks:
+#   internal:
+#     driver: bridge
+
+
+
+# COOLIFY SPECIFIC Docker Compose file
 version: "3.9"
 
 services:
@@ -5,8 +51,6 @@ services:
     build: .
     container_name: clipboard-app
     restart: always
-    ports:
-      - "3000:3000"
     environment:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongo:27017/live_clipboard
@@ -16,10 +60,8 @@ services:
       - mongo
     volumes:
       - ./public/uploads:/app/public/uploads
-    networks:
-      - internal
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 30s
       timeout: 5s
       start_period: 30s
@@ -31,12 +73,8 @@ services:
     restart: always
     volumes:
       - mongodb_data:/data/db
-    networks:
-      - internal
 
 volumes:
   mongodb_data:
 
-networks:
-  internal:
-    driver: bridge
+# Network automatically handled by Coolify!!
