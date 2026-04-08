@@ -51,6 +51,8 @@ services:
     build: .
     container_name: clipboard-app
     restart: always
+    ports:
+      - "3000:3000"
     environment:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongo:27017/live_clipboard
