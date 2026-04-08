@@ -25,19 +25,32 @@ export default function ClipboardUI({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const [densityMode, setDensityMode] = useState('comfortable');
+  const [densityMode, setDensityMode] = useState('lazy');
 
   const isConnected = connectionStatus.socket === 'connected';
   const noteCount = clipboard.textNotes?.length || 0;
-  const isCompact = densityMode === 'tight';
+  const isCompact = densityMode === 'focus';
 
   const MAX_NOTES = 4;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storedDensity = window.localStorage.getItem('clipboard-density-mode');
-    if (storedDensity === 'tight' || storedDensity === 'comfortable') {
+    if (!storedDensity) return;
+
+    // Backward compatibility for previously stored values.
+    if (storedDensity === 'focus' || storedDensity === 'lazy') {
       setDensityMode(storedDensity);
+      return;
+    }
+
+    if (storedDensity === 'tight') {
+      setDensityMode('focus');
+      return;
+    }
+
+    if (storedDensity === 'comfortable' || storedDensity === 'cozy') {
+      setDensityMode('lazy');
     }
   }, []);
 
@@ -46,8 +59,17 @@ export default function ClipboardUI({
     window.localStorage.setItem('clipboard-density-mode', densityMode);
   }, [densityMode]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('focus-mode', densityMode === 'focus');
+
+    return () => {
+      document.body.classList.remove('focus-mode');
+    };
+  }, [densityMode]);
+
   const toggleDensityMode = () => {
-    setDensityMode((prev) => (prev === 'tight' ? 'comfortable' : 'tight'));
+    setDensityMode((prev) => (prev === 'focus' ? 'lazy' : 'focus'));
   };
 
   useEffect(() => {

@@ -7,7 +7,7 @@ import { Download, X, File as FileIcon, Image as ImageIcon, Loader, Eye, Copy } 
 import { toast } from 'react-hot-toast';
 import Modal from './Modal';
 
-export default function FileCard({ file, encryptionKey, roomId, isConnected, onImageClick, densityMode = 'comfortable' }) {
+export default function FileCard({ file, encryptionKey, roomId, isConnected, onImageClick, densityMode = 'lazy' }) {
   const [decryptedName, setDecryptedName] = useState('...');
   const [isDeleting, setIsDeleting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,7 +15,7 @@ export default function FileCard({ file, encryptionKey, roomId, isConnected, onI
   const [previewUrl, setPreviewUrl] = useState(null);
 
   const isImage = file.type?.startsWith('image/');
-  const isTight = densityMode === 'tight';
+  const isTight = densityMode === 'focus';
 
   useEffect(() => {
     const processFile = async () => {

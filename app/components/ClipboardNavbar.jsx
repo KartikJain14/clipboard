@@ -5,7 +5,7 @@ export default function ClipboardNavbar({
   onShare = () => {},
   onDeleteRoom = () => {},
   onLogout = () => {},
-  densityMode = 'comfortable',
+  densityMode = 'lazy',
   onToggleDensity = () => {}
 }) {
   return (
@@ -16,8 +16,8 @@ export default function ClipboardNavbar({
         </div>
         
         <div className={styles.navActions}>
-          <button type="button" onClick={onToggleDensity} className={styles.navButton} aria-label="Toggle interface density">
-            {densityMode === 'tight' ? 'cozy' : 'tight'}
+          <button type="button" onClick={onToggleDensity} className={styles.navButton} aria-label="Toggle between focus and lazy layout">
+            {densityMode === 'focus' ? 'lazy' : 'focus'}
           </button>
 
           <button type="button" onClick={onShare} className={styles.navButton} aria-label="Copy room URL to clipboard">
